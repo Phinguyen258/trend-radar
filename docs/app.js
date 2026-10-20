@@ -8,6 +8,8 @@ const state = {
   view: "today",
   feedTag: null,
   muted: true,
+  animate: true,   // hiệu ứng xuất hiện chỉ chạy ở lần mở đầu tiên
+  todayScroll: 0,
 };
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -111,10 +113,11 @@ function renderToday() {
   const [y, m, dd] = d.date.split("-").map(Number);
   const weekday = WEEKDAY[new Date(y, m - 1, dd).getDay()];
   let i = 0; // thứ tự hiệu ứng xuất hiện
+  const rise = state.animate ? "rise" : "";
 
   const hero = r.hashtags[0];
   const heroHTML = hero ? `
-    <button class="hero pressable rise" style="--i:${i++}" data-tag="${esc(hero.name)}">
+    <button class="hero pressable ${rise}" style="--i:${i++}" data-tag="${esc(hero.name)}">
       <div class="eyebrow">${ic("flame")} Trend #1 ${esc(r.name)} ${deltaHTML(hero.change)}</div>
       <h2><span class="hash">#</span>${esc(hero.name)}</h2>
       <p class="why">${phaseHTML(hero.phase)} ${esc(hero.reasons?.[0] || "")}</p>
@@ -128,7 +131,7 @@ function renderToday() {
 
   const names = (arr) => arr.map((x) => "#" + (x.name ?? x)).join(" · ");
   const tile = (key, cls, icon, title, count, list, empty, big) => `
-    <button class="tile ${cls} ${big ? "big" : ""} pressable rise" style="--i:${i++}" data-f="${key}" aria-pressed="${state.tagFilter === key}">
+    <button class="tile ${cls} ${big ? "big" : ""} pressable ${rise}" style="--i:${i++}" data-f="${key}" aria-pressed="${state.tagFilter === key}">
       <div class="t-head"><span class="t-ic">${ic(icon)}</span>${title}</div>
       <div class="t-num">${count}</div>
       <div class="t-list">${count ? esc(list) : `<span class="muted">${empty}</span>`}</div>
@@ -136,9 +139,9 @@ function renderToday() {
 
   const vids = r.videos.slice(0, 12);
   const reelHTML = vids.length ? `
-    <div class="sec-title rise" style="--i:${i++}"><h3>${ic("zap", "fill")} Video đang viral</h3>
+    <div class="sec-title ${rise}" style="--i:${i++}"><h3>${ic("zap", "fill")} Video đang viral</h3>
       <button class="link pressable" data-go="feed">Xem tất cả</button></div>
-    <div class="reel rise" style="--i:${i++}">
+    <div class="reel ${rise}" style="--i:${i++}">
       ${vids.map((v, k) => `
         <button class="reel-card pressable" data-play="${k}" aria-label="Xem video hạng ${v.rank} của ${esc(v.author)}">
           <img src="${esc(v.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">
@@ -155,25 +158,25 @@ function renderToday() {
   const filterNames = { all: "Tất cả", new: "Mới", rising: "Đang lên", jump: "Tăng hạng" };
 
   $("#view-today").innerHTML = `
-    <div class="dateline rise" style="--i:${i++}">
+    <div class="dateline ${rise}" style="--i:${i++}">
       <div><h1>${weekday}, ${fmtDate(d.date)}</h1>
         <div class="sub">Cập nhật ${genAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</div></div>
       <span class="pill">${ic("calendar")}${d.previousDate ? `so với ${fmtDate(d.previousDate)}` : "ngày đầu tiên"}</span>
     </div>
-    ${(d.warnings || []).map((w) => `<div class="warn rise" style="--i:${i++}">${ic("alert")}<div>${esc(w)}</div></div>`).join("")}
+    ${(d.warnings || []).map((w) => `<div class="warn ${rise}" style="--i:${i++}">${ic("alert")}<div>${esc(w)}</div></div>`).join("")}
     ${heroHTML}
-    <div class="sec-title rise" style="--i:${i++}"><h3>${ic("sparkles")} Điểm nóng hôm nay</h3></div>
+    <div class="sec-title ${rise}" style="--i:${i++}"><h3>${ic("sparkles")} Điểm nóng hôm nay</h3></div>
     <div class="bento">
       ${tile("new", "new", "sparkles", "Mới vào top", s.newHashtags.length, names(s.newHashtags), d.previousDate ? "Không có hashtag mới" : "Mai sẽ có so sánh", true)}
-      ${tile("rising", "rise", "trend", "Đang lên", s.risingHashtags.length, names(s.risingHashtags), "Chưa có")}
+      ${tile("rising", "going", "trend", "Đang lên", s.risingHashtags.length, names(s.risingHashtags), "Chưa có")}
       ${tile("jump", "jump", "zap", "Tăng hạng", s.jumpHashtags.length, names(s.jumpHashtags), d.previousDate ? "Chưa có" : "Mai sẽ có")}
     </div>
     ${reelHTML}
-    <div class="sec-title rise" style="--i:${i++}"><h3>${ic("hash")} Bảng xếp hạng</h3>
+    <div class="sec-title ${rise}" style="--i:${i++}"><h3>${ic("hash")} Bảng xếp hạng</h3>
       ${state.tagFilter !== "all" ? `<button class="link pressable" data-f="all">Bỏ lọc "${filterNames[state.tagFilter]}"</button>` : `<span class="muted" style="font-size:13px">${r.hashtags.length} hashtag</span>`}</div>
     <ol class="rank-list">
       ${tags.length ? tags.map((h, k) => `
-        <li><button class="row ${h.rank <= 3 ? "top" : ""} pressable rise" style="--i:${Math.min(i + k, i + 12)}" data-tag="${esc(h.name)}">
+        <li><button class="row ${h.rank <= 3 ? "top" : ""} pressable" data-tag="${esc(h.name)}">
           <div class="rk"><b>${h.rank}</b>${deltaHTML(h.change)}</div>
           <div style="min-width:0">
             <div class="nm">#${esc(h.name)}</div>
@@ -183,6 +186,7 @@ function renderToday() {
           ${spark(h.curve)}
         </button></li>`).join("") : `<div class="empty">Không có hashtag nào trong mục này</div>`}
     </ol>`;
+  state.animate = false;
 }
 
 function rankChart(name) {
@@ -372,20 +376,23 @@ function openSheet(html) {
   lastFocus = document.activeElement;
   $("#sheet-content").innerHTML = html;
   $("#sheet").classList.remove("hidden");
+  document.body.classList.add("sheet-open");
   $(".sheet-body").scrollTop = 0;
   $(".sheet-close").focus({ preventScroll: true });
 }
 function closeSheet() {
   $("#sheet").classList.add("hidden");
+  document.body.classList.remove("sheet-open");
   lastFocus?.focus?.({ preventScroll: true });
 }
 
 function setView(v, startAt = 0) {
+  if (state.view === "today" && v !== "today") state.todayScroll = window.scrollY;
   state.view = v;
   document.querySelectorAll(".view").forEach((el) => el.classList.toggle("active", el.id === "view-" + v));
   document.querySelectorAll("#tabs button").forEach((b) => b.setAttribute("aria-selected", b.dataset.view === v));
   document.body.classList.toggle("feed-mode", v === "feed");
-  if (v === "feed") renderFeed(startAt); else stopFeed();
+  if (v === "feed") renderFeed(startAt); else { stopFeed(); window.scrollTo(0, state.todayScroll); }
 }
 
 document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#sheet").classList.contains("hidden")) closeSheet(); });
@@ -399,7 +406,7 @@ document.addEventListener("click", (e) => {
   if (t.dataset.play) { state.feedTag = null; return setView("feed", +t.dataset.play); }
   if (t.dataset.r) {
     state.region = t.dataset.r; localSet("region", t.dataset.r); state.feedTag = null; state.tagFilter = "all";
-    renderRegions(); stopFeed(); $("#view-today").scrollTop = 0; return render();
+    renderRegions(); stopFeed(); window.scrollTo(0, 0); return render();
   }
   if (t.dataset.f) {
     state.tagFilter = state.tagFilter === t.dataset.f ? "all" : t.dataset.f;
