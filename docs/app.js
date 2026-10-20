@@ -6,7 +6,7 @@ const state = {
   region: localGet("region") || "VN",
   tagFilter: "all",
   view: "today",
-  feedTag: null,
+  playlist: null,  // {tag, label, videos}: đang xem video của một trend; null = top video
   muted: true,
   animate: true,   // hiệu ứng xuất hiện chỉ chạy ở lần mở đầu tiên
   todayScroll: 0,
@@ -94,6 +94,8 @@ async function load() {
 }
 
 const region = () => state.data.regions[state.region];
+const ttLink = (v) => `https://www.tiktok.com/@${encodeURIComponent(v.author || "")}/video/${encodeURIComponent(v.id)}`;
+const hotTrends = (r) => (r.summary.hotTrends || []).map((n) => r.hashtags.find((h) => h.name === n)).filter((h) => h?.videos?.length);
 
 function renderRegions() {
   $("#regions").innerHTML = Object.values(state.data.regions)
@@ -137,10 +139,10 @@ function renderToday() {
       <div class="t-list">${count ? esc(list) : `<span class="muted">${empty}</span>`}</div>
     </button>`;
 
-  const vids = r.videos.slice(0, 12);
+  const vids = r.videos;
   const reelHTML = vids.length ? `
-    <div class="sec-title ${rise}" style="--i:${i++}"><h3>${ic("zap", "fill")} Video đang viral</h3>
-      <button class="link pressable" data-go="feed">Xem tất cả</button></div>
+    <div class="sec-title ${rise}" style="--i:${i++}"><h3>${ic("zap", "fill")} Top ${vids.length} video viral</h3>
+      <button class="link pressable" data-go="feed">Lướt xem</button></div>
     <div class="reel ${rise}" style="--i:${i++}">
       ${vids.map((v, k) => `
         <button class="reel-card pressable" data-play="${k}" aria-label="Xem video hạng ${v.rank} của ${esc(v.author)}">
@@ -149,6 +151,30 @@ function renderToday() {
           <span class="play">${ic("play", "fill")}</span>
           <span class="bottom"><b>${ic("eye")}${fmt(v.views)}</b><span>@${esc(v.author)}</span></span>
         </button>`).join("")}
+    </div>` : "";
+
+  const trends = hotTrends(r);
+  const trendsHTML = trends.length ? `
+    <div class="sec-title ${rise}" style="--i:${i++}"><h3>${ic("trend")} Trend đang tăng nhanh</h3>
+      <span class="muted" style="font-size:13px">${trends.length} trend</span></div>
+    <div class="trend-list">
+      ${trends.map((h) => `
+        <div class="trend-card">
+          <button class="trend-head pressable" data-tag="${esc(h.name)}">
+            <div style="min-width:0">
+              <div class="t-name"><span class="hash">#</span>${esc(h.name)}</div>
+              <div class="meta">${phaseHTML(h.phase)}<span>Hạng ${h.rank} ${deltaHTML(h.change)}</span><span>· ${fmt(h.posts)} video</span></div>
+            </div>
+            <span class="mom">${h.change === "new" ? "MỚI" : h.momentum > 0 ? `+${Math.round(h.momentum)}` : ""}<small>${h.change === "new" ? "vào top" : h.momentum > 0 ? "độ hot / 3 ngày" : ""}</small></span>
+          </button>
+          <div class="reel mini">
+            ${h.videos.map((v, k) => `
+              <button class="reel-card pressable" data-trend="${esc(h.name)}" data-at="${k}" aria-label="Xem video ${k + 1} của trend ${esc(h.name)}">
+                <img src="${esc(v.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">
+                <span class="play">${ic("play", "fill")}</span>
+              </button>`).join("")}
+          </div>
+        </div>`).join("")}
     </div>` : "";
 
   let tags = r.hashtags;
@@ -171,6 +197,7 @@ function renderToday() {
       ${tile("rising", "going", "trend", "Đang lên", s.risingHashtags.length, names(s.risingHashtags), "Chưa có")}
       ${tile("jump", "jump", "zap", "Tăng hạng", s.jumpHashtags.length, names(s.jumpHashtags), d.previousDate ? "Chưa có" : "Mai sẽ có")}
     </div>
+    ${trendsHTML}
     ${reelHTML}
     <div class="sec-title ${rise}" style="--i:${i++}"><h3>${ic("hash")} Bảng xếp hạng</h3>
       ${state.tagFilter !== "all" ? `<button class="link pressable" data-f="all">Bỏ lọc "${filterNames[state.tagFilter]}"</button>` : `<span class="muted" style="font-size:13px">${r.hashtags.length} hashtag</span>`}</div>
@@ -227,7 +254,7 @@ const reasonsHTML = (list) => `<ul class="reasons">${(list || []).map((x) => `<l
 function openTag(name) {
   const h = region().hashtags.find((x) => x.name === name);
   if (!h) return;
-  const vids = region().videos.filter((v) => (v.tags || []).includes(name.toLowerCase()));
+  const vids = h.videos || [];
   openSheet(`
     <div class="kicker">Hạng #${h.rank} ${deltaHTML(h.change)} ${phaseHTML(h.phase)}</div>
     <h2><span class="hash">#</span>${esc(h.name)}</h2>
@@ -238,13 +265,19 @@ function openTag(name) {
     </div>
     <div class="sec">${ic("bulb")} Vì sao đang trend</div>
     ${reasonsHTML(h.reasons)}
+    ${vids.length ? `<div class="sec">${ic("circle-play")} ${vids.length} video tiêu biểu của trend</div>
+      <div class="vgrid">${vids.map((v, k) => `
+        <button class="reel-card pressable" data-trend="${esc(h.name)}" data-at="${k}" aria-label="Xem video ${k + 1}">
+          <img src="${esc(v.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer">
+          <span class="play">${ic("play", "fill")}</span>
+        </button>`).join("")}</div>` : ""}
     <div class="sec">${ic("flame")} Độ hot 7 ngày (100 = đỉnh)</div>
     ${curveChart(h.curve)}
     <div class="sec">${ic("chart")} Thứ hạng theo ngày</div>
     ${rankChart(h.name)}
     ${h.creators?.length ? `<div class="sec">${ic("users")} Creator nổi bật</div>${h.creators.map((c) => `<div class="creator"><a href="https://www.tiktok.com/@${esc(c.handle)}" target="_blank" rel="noopener">@${esc(c.handle)}</a><span class="muted">${fmt(c.followers)} follower</span></div>`).join("")}` : ""}
     <div class="btns">
-      ${vids.length ? `<button class="btn primary pressable" data-feedtag="${esc(h.name)}">${ic("play", "fill")} ${vids.length} video trend</button>` : ""}
+      ${vids.length ? `<button class="btn primary pressable" data-trend="${esc(h.name)}" data-at="0">${ic("play", "fill")} Lướt ${vids.length} video</button>` : ""}
       <a class="btn ${vids.length ? "" : "primary"} pressable" href="https://www.tiktok.com/tag/${encodeURIComponent(h.name)}" target="_blank" rel="noopener">${ic("external")} Xem trên TikTok</a>
     </div>`);
 }
@@ -254,8 +287,7 @@ function openTag(name) {
 let activeSlide = null;
 
 function feedVideos() {
-  const vids = region().videos;
-  return state.feedTag ? vids.filter((v) => (v.tags || []).includes(state.feedTag.toLowerCase())) : vids;
+  return state.playlist ? state.playlist.videos : region().videos;
 }
 
 function renderFeed(startAt = 0) {
@@ -263,8 +295,8 @@ function renderFeed(startAt = 0) {
   const feed = $("#feed");
   const ff = $("#feed-filter");
   stopFeed();
-  ff.classList.toggle("hidden", !state.feedTag);
-  ff.innerHTML = state.feedTag ? `#${esc(state.feedTag)}<button data-clearfeed aria-label="Bỏ lọc">${ic("x")}</button>` : "";
+  const pl = state.playlist;
+  ff.classList.add("hidden");
   if (!vids.length) {
     const msg = region().videos.length ? "Chưa có video trend" : `TikTok không cung cấp bảng video trend cho ${esc(region().name)}. Xem tab Hôm nay để biết hashtag đang hot.`;
     feed.innerHTML = `<div class="empty" style="padding-top:38vh">${msg}</div>`;
@@ -278,21 +310,24 @@ function renderFeed(startAt = 0) {
       <div class="paused"><span>${ic("play", "fill")}</span></div>
       <div class="hint" aria-live="polite"></div>
       <div class="shade"></div>
-      <div class="topbar"><span class="rank-badge">${ic("flame")} Hạng ${v.rank} ${deltaHTML(v.change)}</span><span class="counter">${i + 1}/${vids.length}</span></div>
+      <div class="topbar">${pl ? `<span class="rank-badge">${ic("trend")} #${esc(pl.tag)}</span>` : `<span class="rank-badge">${ic("flame")} Hạng ${v.rank} ${deltaHTML(v.change)}</span>`}<span class="counter">${i + 1}/${vids.length}</span>${pl ? `<button class="counter exit pressable" data-clearfeed aria-label="Thoát trend, quay lại top video">${ic("x")} Top video</button>` : ""}</div>
       <div class="info">
-        <div class="who">${v.avatar ? `<img class="avatar" src="${esc(v.avatar)}" alt="" referrerpolicy="no-referrer">` : ""}@${esc(v.author)}</div>
+        ${v.author ? `<div class="who">${v.avatar ? `<img class="avatar" src="${esc(v.avatar)}" alt="" referrerpolicy="no-referrer">` : ""}@${esc(v.author)}</div>
         <div class="title">${esc(v.title)}</div>
         <div class="kpis">
           <span>${ic("eye")}${fmt(v.views)} / 7 ngày</span>
           ${v.engagement ? `<span>${ic("heart")}${pct(v.engagement, 1)}</span>` : ""}
           ${v.vtr6s ? `<span>${ic("timer")}${pct(v.vtr6s)} xem &gt;6s</span>` : ""}
         </div>
-        <button class="why-btn pressable" data-why="${i}">${ic("bulb")} Vì sao trend?</button>
+        <button class="why-btn pressable" data-why="${i}">${ic("bulb")} Vì sao trend?</button>` : `
+        <div class="who">#${esc(pl?.tag)}</div>
+        <div class="title">${esc(pl?.label || "")}</div>
+        <button class="why-btn pressable" data-tag="${esc(pl?.tag)}">${ic("bulb")} Vì sao trend này hot?</button>`}
       </div>
       <div class="rail">
         <button class="r-btn pressable" data-mute aria-pressed="${!state.muted}"><span class="r-ic">${ic(state.muted ? "vol-off" : "vol-on")}</span>${state.muted ? "Bật tiếng" : "Tắt tiếng"}</button>
         <button class="r-btn pressable" data-interact aria-pressed="false"><span class="r-ic">${ic("pointer")}</span>Điều khiển</button>
-        <a class="r-btn pressable" href="https://www.tiktok.com/@${encodeURIComponent(v.author || "")}/video/${esc(v.id)}" target="_blank" rel="noopener"><span class="r-ic">${ic("external")}</span>TikTok</a>
+        <a class="r-btn pressable" href="${ttLink(v)}" target="_blank" rel="noopener"><span class="r-ic">${ic("external")}</span>TikTok</a>
       </div>
     </div>`).join("");
   feed.scrollTop = startAt * feed.clientHeight;
@@ -315,7 +350,7 @@ $("#feed").addEventListener("scroll", () => {
 
 function playerURL(id) {
   const p = new URLSearchParams({
-    autoplay: 1, loop: 1, controls: 0, progress_bar: 1, play_button: 0, volume_control: 0,
+    autoplay: 1, muted: state.muted ? 1 : 0, loop: 1, controls: 0, progress_bar: 1, play_button: 0, volume_control: 0,
     fullscreen_button: 0, timestamp: 0, music_info: 0, description: 0, rel: 0,
     native_context_menu: 0, closed_caption: 0,
   });
@@ -421,7 +456,7 @@ function openVideo(i) {
     <div class="sec">${ic("hash")} Nội dung</div>
     <div class="caption">${esc(v.title) || "<span class='muted'>Không có mô tả</span>"}</div>
     ${tagsHTML ? `<div class="chips" style="margin-top:12px">${tagsHTML}</div>` : ""}
-    <div class="btns"><a class="btn primary pressable" href="https://www.tiktok.com/@${encodeURIComponent(v.author || "")}/video/${esc(v.id)}" target="_blank" rel="noopener">${ic("external")} Mở trong TikTok</a></div>`);
+    <div class="btns"><a class="btn primary pressable" href="${ttLink(v)}" target="_blank" rel="noopener">${ic("external")} Mở trong TikTok</a></div>`);
 }
 
 // ------------------------------------------------------------ Sheet + điều hướng
@@ -457,10 +492,17 @@ document.addEventListener("click", (e) => {
   if (!t) return;
   if (t.matches(".sheet-backdrop") || t.hasAttribute("data-close")) return closeSheet();
   if (t.dataset.view) return setView(t.dataset.view);
-  if (t.dataset.go) { state.feedTag = null; return setView(t.dataset.go); }
-  if (t.dataset.play) { state.feedTag = null; return setView("feed", +t.dataset.play); }
+  if (t.dataset.go) { state.playlist = null; return setView(t.dataset.go); }
+  if (t.dataset.play) { state.playlist = null; return setView("feed", +t.dataset.play); }
+  if (t.dataset.trend) {
+    const h = region().hashtags.find((x) => x.name === t.dataset.trend);
+    if (!h?.videos?.length) return;
+    state.playlist = { tag: h.name, label: `Video tiêu biểu · hạng ${h.rank} · ${fmt(h.posts)} video đang dùng hashtag này`, videos: h.videos };
+    closeSheet();
+    return setView("feed", +t.dataset.at || 0);
+  }
   if (t.dataset.r) {
-    state.region = t.dataset.r; localSet("region", t.dataset.r); state.feedTag = null; state.tagFilter = "all";
+    state.region = t.dataset.r; localSet("region", t.dataset.r); state.playlist = null; state.tagFilter = "all";
     renderRegions(); stopFeed(); window.scrollTo(0, 0); return render();
   }
   if (t.dataset.f) {
@@ -469,8 +511,7 @@ document.addEventListener("click", (e) => {
     if (state.tagFilter !== "all") $(".rank-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
     return;
   }
-  if (t.dataset.feedtag) { state.feedTag = t.dataset.feedtag; closeSheet(); return setView("feed"); }
-  if (t.hasAttribute("data-clearfeed")) { state.feedTag = null; return renderFeed(); }
+  if (t.hasAttribute("data-clearfeed")) { state.playlist = null; return renderFeed(); }
   if (t.dataset.why) return openVideo(+t.dataset.why);
   if (t.hasAttribute("data-mute")) {
     state.muted = !state.muted;

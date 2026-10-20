@@ -79,11 +79,11 @@ def fetch_hashtags(c: Client, country: str, limit: int):
         page += 1
         time.sleep(1)
     out = []
-    for it in items[:limit]:
+    for rank, it in enumerate(items[:limit], 1):  # tự đánh số: rankIndex của TikTok có lúc nhảy cóc
         out.append({
             "id": it.get("hashtagID"),
             "name": it.get("hashtagName"),
-            "rank": int(it.get("rankIndex") or 0),
+            "rank": rank,
             "posts": int(it.get("publishCnt") or 0),
             "views": int(it.get("vv") or 0),
             "curve": [round(float(p.get("value") or 0), 1) for p in it.get("popularityCurve") or []],
@@ -94,6 +94,14 @@ def fetch_hashtags(c: Client, country: str, limit: int):
             ],
         })
     return out
+
+
+def fetch_hashtag_videos(c: Client, country: str, tag_id: str):
+    """10 video tiêu biểu của một hashtag (trang chi tiết hashtag trên Creative Center)."""
+    j = c.request("/CreativeOne/KnowledgeAPI/GetHashtagDetail",
+                  {"hashtagID": tag_id, "countryCode": country, "timeRange": 7})
+    return [{"id": v.get("itemID"), "cover": v.get("coverURL")}
+            for v in j.get("videoList") or [] if v.get("itemID")]
 
 
 def fetch_videos(c: Client, country: str, limit: int, organic_only: bool):
@@ -206,6 +214,19 @@ def analyze_hashtags(today, yesterday):
             reasons.append(f"Trung bình {fmt(vpp)} lượt xem mỗi video")
             if vpp >= 10000:
                 reasons.append("Ít người làm nhưng lượt xem cao, dễ ăn view nếu làm sớm")
+        c = h["curve"]
+        h["momentum"] = round(c[-1] - c[-4], 1) if len(c) >= 4 else 0
+        score = h["momentum"]
+        if h.get("change") == "new":
+            score += 30
+        elif isinstance(h.get("change"), int) and h["change"] > 0:
+            score += h["change"] * 2
+        if p and p["posts"] and h["posts"] > p["posts"]:
+            h["postsGrowth"] = round((h["posts"] - p["posts"]) / p["posts"] * 100, 1)
+            score += min(h["postsGrowth"], 100) / 2
+        h["score"] = round(score, 1)
+        if h["momentum"] >= 20:
+            reasons.insert(1 if reasons else 0, f"Độ hot tăng {h['momentum']:.0f} điểm trong 3 ngày gần nhất")
         h["reasons"] = reasons
     return today
 
@@ -261,11 +282,15 @@ def summarize(region):
                    key=lambda h: -h["change"])
     rising = [h["name"] for h in region["hashtags"] if h.get("phase") == "rising"]
     new_videos = [v for v in region["videos"] if v.get("change") == "new"]
+    # Trend tăng nhanh: hashtag có điểm đà tăng cao nhất (cần có video để xem)
+    hot = sorted((h for h in region["hashtags"] if h["score"] > 0 and h.get("videos")),
+                 key=lambda h: -h["score"])
     return {
         "newHashtags": new_tags[:10],
         "jumpHashtags": [{"name": h["name"], "by": h["change"]} for h in jumps[:10]],
         "risingHashtags": rising[:10],
         "newVideos": len(new_videos),
+        "hotTrends": [h["name"] for h in hot[:12]],
     }
 
 
@@ -308,7 +333,17 @@ def main():
         tags = fetch_hashtags(client, code, CONFIG["hashtag_limit"])
         print(f"[{code}] {len(tags)} hashtag. Lấy video...")
         vids = fetch_videos(client, code, CONFIG["video_limit"], CONFIG.get("organic_only", True))
-        print(f"[{code}] {len(vids)} video")
+        print(f"[{code}] {len(vids)} video. Lấy video theo từng hashtag...")
+        got = 0
+        for h in tags:
+            try:
+                h["videos"] = fetch_hashtag_videos(client, code, h["id"])
+                got += bool(h["videos"])
+            except Exception as e:  # một hashtag lỗi thì bỏ qua, không làm hỏng cả lần chạy
+                print(f"  bỏ qua #{h['name']}: {e}")
+                h["videos"] = []
+            time.sleep(0.4)
+        print(f"[{code}] có video cho {got}/{len(tags)} hashtag")
         if len(tags) <= 3:
             warnings.append(f"{code}: chỉ lấy được {len(tags)} hashtag, phiên đăng nhập TikTok "
                             "có thể đã hết hạn")
