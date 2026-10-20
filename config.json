@@ -1,0 +1,11 @@
+{
+  "regions": [
+    {"code": "VN", "name": "Việt Nam"},
+    {"code": "US", "name": "Mỹ"}
+  ],
+  "hashtag_limit": 100,
+  "video_limit": 100,
+  "organic_only": true,
+  "ntfy_topic": "trendvn-ca18e6e4a6c5",
+  "app_url": ""
+}

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Trend Radar</title>
+  <meta name="theme-color" content="#0b0b10">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Trend Radar">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="top">
+    <div class="brand">Trend Radar</div>
+    <div id="regions" class="seg"></div>
+  </header>
+
+  <main>
+    <section id="view-today" class="view active">
+      <div id="updated" class="muted small"></div>
+      <div id="warnings"></div>
+      <div id="summary"></div>
+      <div class="list-head">
+        <h2>Hashtag đang trend</h2>
+        <div id="tag-filter" class="seg small"></div>
+      </div>
+      <ol id="tags" class="tags"></ol>
+    </section>
+
+    <section id="view-feed" class="view">
+      <div id="feed" class="feed"></div>
+      <div id="feed-filter" class="feed-filter hidden"></div>
+    </section>
+  </main>
+
+  <nav id="tabs">
+    <button data-view="today" class="active"><span>📊</span>Hôm nay</button>
+    <button data-view="feed"><span>▶️</span>Video trend</button>
+  </nav>
+
+  <div id="sheet" class="sheet hidden" role="dialog" aria-modal="true">
+    <div class="sheet-backdrop"></div>
+    <div class="sheet-body">
+      <div class="grip"></div>
+      <div id="sheet-content"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

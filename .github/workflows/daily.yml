@@ -1,0 +1,38 @@
+name: Cập nhật trend mỗi ngày
+
+on:
+  schedule:
+    - cron: "0 1 * * *"   # 01:00 UTC = 08:00 giờ Việt Nam
+  workflow_dispatch:       # cho phép bấm chạy tay trên GitHub
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-trends
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Lấy trend TikTok
+        env:
+          TIKTOK_COOKIE: ${{ secrets.TIKTOK_COOKIE }}
+          APP_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+        run: python scraper/fetch_trends.py
+
+      - name: Lưu dữ liệu
+        run: |
+          git config user.name "trend-bot"
+          git config user.email "trend-bot@users.noreply.github.com"
+          git add data docs/data
+          git commit -m "Trend $(TZ=Asia/Ho_Chi_Minh date +%Y-%m-%d)" || echo "Không có gì mới"
+          git push
