@@ -262,7 +262,11 @@ function renderFeed(startAt = 0) {
   stopFeed();
   ff.classList.toggle("hidden", !state.feedTag);
   ff.innerHTML = state.feedTag ? `#${esc(state.feedTag)}<button data-clearfeed aria-label="Bỏ lọc">${ic("x")}</button>` : "";
-  if (!vids.length) { feed.innerHTML = `<div class="empty" style="padding-top:40vh">Chưa có video trend</div>`; return; }
+  if (!vids.length) {
+    const msg = region().videos.length ? "Chưa có video trend" : `TikTok không cung cấp bảng video trend cho ${esc(region().name)}. Xem tab Hôm nay để biết hashtag đang hot.`;
+    feed.innerHTML = `<div class="empty" style="padding-top:38vh">${msg}</div>`;
+    return;
+  }
   feed.innerHTML = vids.map((v, i) => `
     <div class="slide" data-i="${i}" data-id="${esc(v.id)}">
       <div class="bg" style="background-image:url('${esc(v.cover)}')"></div>
