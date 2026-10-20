@@ -1,5 +1,5 @@
 // Cache vỏ app để mở nhanh; dữ liệu luôn lấy mới, mất mạng thì dùng bản đã lưu.
-const CACHE = "trend-radar-v4";
+const CACHE = "trend-radar-v5";
 const SHELL = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
@@ -17,8 +17,10 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   if (url.origin !== location.origin) return;
   // Network first: cập nhật mới nhất, rớt mạng thì lấy cache
+  if (e.request.method !== "GET") return;
+  // no-cache: luôn hỏi lại GitHub có bản mới chưa, không dùng bản trình duyệt giữ 10 phút
   e.respondWith(
-    fetch(e.request)
+    fetch(e.request.url, { cache: "no-cache" }) // dùng URL: request kiểu navigate không cho thêm tuỳ chọn
       .then((res) => {
         const copy = res.clone();
         caches.open(CACHE).then((c) => c.put(e.request, copy));
