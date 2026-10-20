@@ -1,5 +1,5 @@
 // Cache vỏ app để mở nhanh; dữ liệu luôn lấy mới, mất mạng thì dùng bản đã lưu.
-const CACHE = "trend-radar-v5";
+const CACHE = "trend-radar-v6";
 const SHELL = ["./", "index.html", "style.css", "app.js", "manifest.webmanifest", "icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {

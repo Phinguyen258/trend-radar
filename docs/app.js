@@ -251,7 +251,6 @@ function openTag(name) {
 
 // ------------------------------------------------------------ Feed video
 
-let observer = null;
 let activeSlide = null;
 
 function feedVideos() {
@@ -277,6 +276,7 @@ function renderFeed(startAt = 0) {
       <img class="cover" src="${esc(v.cover)}" alt="" loading="${Math.abs(i - startAt) < 2 ? "eager" : "lazy"}" referrerpolicy="no-referrer">
       <button class="tap" aria-label="Phát hoặc tạm dừng"></button>
       <div class="paused"><span>${ic("play", "fill")}</span></div>
+      <div class="hint" aria-live="polite"></div>
       <div class="shade"></div>
       <div class="topbar"><span class="rank-badge">${ic("flame")} Hạng ${v.rank} ${deltaHTML(v.change)}</span><span class="counter">${i + 1}/${vids.length}</span></div>
       <div class="info">
@@ -296,20 +296,68 @@ function renderFeed(startAt = 0) {
       </div>
     </div>`).join("");
   feed.scrollTop = startAt * feed.clientHeight;
-  observer?.disconnect();
-  observer = new IntersectionObserver((entries) => {
-    entries.forEach((e) => { if (e.isIntersecting && e.intersectionRatio > 0.6) activate(e.target); });
-  }, { root: feed, threshold: [0.6] });
-  feed.querySelectorAll(".slide").forEach((s) => observer.observe(s));
+  activateCurrent();
 }
+
+// Video đang xem = vị trí cuộn / chiều cao màn hình (chắc chắn hơn IntersectionObserver)
+let scrollTimer = null;
+function activateCurrent() {
+  const feed = $("#feed");
+  const slides = feed.querySelectorAll(".slide");
+  if (!slides.length || state.view !== "feed") return;
+  const idx = Math.min(slides.length - 1, Math.max(0, Math.round(feed.scrollTop / feed.clientHeight)));
+  activate(slides[idx]);
+}
+$("#feed").addEventListener("scroll", () => {
+  clearTimeout(scrollTimer);
+  scrollTimer = setTimeout(activateCurrent, 120);
+}, { passive: true });
 
 function playerURL(id) {
   const p = new URLSearchParams({
     autoplay: 1, loop: 1, controls: 0, progress_bar: 1, play_button: 0, volume_control: 0,
-    fullscreen_button: 0, timestamp: 0, music_info: 1, description: 0, rel: 0,
+    fullscreen_button: 0, timestamp: 0, music_info: 0, description: 0, rel: 0,
     native_context_menu: 0, closed_caption: 0,
   });
   return `https://www.tiktok.com/player/v1/${id}?${p}`;
+}
+
+// Trình phát TikTok báo trạng thái qua postMessage: onPlayerReady, onStateChange (1 = đang phát), onMute...
+let fallbackTimer = null, unmuteTimer = null;
+window.addEventListener("message", (e) => {
+  let d = e.data;
+  if (typeof d === "string") { try { d = JSON.parse(d); } catch { return; } }
+  if (!d || !d["x-tiktok-player"] || !activeSlide) return;
+  if (e.source !== activeSlide.querySelector("iframe")?.contentWindow) return;
+  const slide = activeSlide;
+  if (d.type === "onPlayerReady") {
+    // Tắt tiếng trước rồi mới phát: iPhone chỉ cho tự phát khi không có tiếng
+    send(slide, "mute");
+    send(slide, "play");
+    if (!state.muted) setTimeout(() => send(slide, "unMute"), 300);
+  } else if (d.type === "onStateChange" && d.value === 1) {
+    slide.classList.add("playing");
+    slide.classList.remove("blocked");
+    clearTimeout(fallbackTimer);
+  } else if (d.type === "onMute" && d.value === false) {
+    clearTimeout(unmuteTimer);
+    hint(slide, "");
+  }
+});
+
+function hint(slide, text) {
+  const h = slide?.querySelector(".hint");
+  if (!h) return;
+  h.textContent = text;
+  h.classList.toggle("show", !!text);
+}
+
+// Bật chế độ chạm thẳng vào trình phát TikTok (iPhone chỉ cho bật tiếng / phát khi chạm trực tiếp vào video)
+function letUserTouchPlayer(slide, text) {
+  slide.classList.add("interactive", "blocked");
+  slide.querySelector("[data-interact]")?.setAttribute("aria-pressed", "true");
+  hint(slide, text);
+  setTimeout(() => hint(slide, ""), 5000);
 }
 
 function activate(slide) {
@@ -320,15 +368,20 @@ function activate(slide) {
   ifr.src = playerURL(slide.dataset.id);
   ifr.allow = "autoplay; encrypted-media; fullscreen; picture-in-picture";
   ifr.title = "Video TikTok";
-  ifr.addEventListener("load", () => setTimeout(() => send(slide, state.muted ? "mute" : "unMute"), 600));
   slide.insertBefore(ifr, slide.querySelector(".tap"));
   slide.classList.remove("is-paused");
+  clearTimeout(fallbackTimer);
+  // Sau 5 giây vẫn chưa phát được → cho chạm thẳng vào video
+  fallbackTimer = setTimeout(() => {
+    if (activeSlide === slide && !slide.classList.contains("playing")) letUserTouchPlayer(slide, "Chạm vào video để phát");
+  }, 5000);
 }
 
 function deactivate(slide) {
   slide.querySelector("iframe")?.remove();
-  slide.classList.remove("interactive", "is-paused");
+  slide.classList.remove("interactive", "is-paused", "playing", "blocked");
   slide.querySelector("[data-interact]")?.setAttribute("aria-pressed", "false");
+  hint(slide, "");
 }
 
 function send(slide, type, value) {
@@ -336,6 +389,8 @@ function send(slide, type, value) {
 }
 
 function stopFeed() {
+  clearTimeout(fallbackTimer);
+  clearTimeout(unmuteTimer);
   if (activeSlide) deactivate(activeSlide);
   activeSlide = null;
 }
@@ -420,6 +475,12 @@ document.addEventListener("click", (e) => {
   if (t.hasAttribute("data-mute")) {
     state.muted = !state.muted;
     send(activeSlide, state.muted ? "mute" : "unMute");
+    clearTimeout(unmuteTimer);
+    if (!state.muted && activeSlide) {
+      // iPhone thường chặn bật tiếng từ bên ngoài → nếu 1 giây chưa có tiếng thì cho chạm thẳng vào video
+      const slide = activeSlide;
+      unmuteTimer = setTimeout(() => letUserTouchPlayer(slide, "Chạm vào video một lần để bật tiếng"), 1000);
+    }
     document.querySelectorAll("[data-mute]").forEach((b) => {
       b.setAttribute("aria-pressed", !state.muted);
       b.innerHTML = `<span class="r-ic">${ic(state.muted ? "vol-off" : "vol-on")}</span>${state.muted ? "Bật tiếng" : "Tắt tiếng"}`;
